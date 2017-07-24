@@ -1,9 +1,8 @@
 
-""" Author Haris Ballis 23/07/2017"""
+# Author Haris Ballis 23/07/2017 
 
 import pandas as pd
 import numpy as np
-import itertools
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 class act(object):
@@ -73,69 +72,71 @@ trips = demand_synthPop.Trips.round()
 # exclude 0 trips
 trips = trips[trips!=0]
 
-#trips = itertools.islice(df.iteritems(),5)
 
-"""
-elems = {'person': person,
-         'plan': plan,
-         'activity': activity,
-         'leg': leg
-        }
+#print(trip[0])
 
-attrs = {}
-attrs['person'] = {'id': agent_id} 
-attrs['activity'] = {'type': activity_type, 
-                        'x': coord_x,
-                        'y': coord_y
-                    }
-
-attrs['plan'] = {'selected': '1'} 
-attrs['leg'] = {'mode': mode} 
-
-
-# In[126]:
-
-
-def build_pop_xml(elems, attrs):
-    root = Element('population')
-    person = SubElement(root, 'person')
-    plan = SubElement(person, 'plan')
-    activity = SubElement(person, 'act')
-    leg = SubElement(person, 'leg')
-
-    for k1, elem in elems.items():
-        for k2, attr in attrs[k1].items():
-            elem.set(k2, attr)
-
-    print(tostring(root))
-
-
-# <population >
-# <person id= "1">
-# <plan selected= "yes " score= " 93.2987721 ">
-# <act type= " home " link= "1" end_time= " 07:16:23 " />
-# <leg mode= "car ">
-# <route type= " links ">1 2 3</ route >
-# </ leg >
-# <act type= " work " link= "3" end_time= " 17:38:34 " />
-# <leg mode= "car ">
-# <route type= " links ">3 1</ route >
-# </ leg >
-# <act type= " home " link= "1" />
-# </ plan >
-# </ person >
-# <person id= "2">
-# <plan selected= "yes " score= " 144.39002 ">
-# ...
-# </ plan >
-# </ person >
-# </ population >
-
-# main_nodes = pd.read_csv(r'C:\Users\haris.ballis\OneDrive - Transport Systems Catapult\Personal\PhD\Model_Cyprus\Data\Network\Zones\nodes_in-fully-detailed-area.csv')
-# mn = main_nodes.NO.tolist()
-
-# idxsl = pd.IndexSlice
-# int_demand = demand.loc[idxsl[:, :, mn, mn], :]
-
-# In[ ]:
-"""
+#temp
+#==============================================================================
+# elems = {'person': person,
+#          'plan': plan,
+#          'activity': activity,
+#          'leg': leg
+#         }
+# 
+# attrs = {}
+# attrs['person'] = {'id': agent_id} 
+# attrs['activity'] = {'type': activity_type, 
+#                         'x': coord_x,
+#                         'y': coord_y
+#                     }
+# 
+# attrs['plan'] = {'selected': '1'} 
+# attrs['leg'] = {'mode': mode} 
+# 
+# 
+# # In[126]:
+# 
+# 
+# def build_pop_xml(elems, attrs):
+#     root = Element('population')
+#     person = SubElement(root, 'person')
+#     plan = SubElement(person, 'plan')
+#     activity = SubElement(person, 'act')
+#     leg = SubElement(person, 'leg')
+# 
+#     for k1, elem in elems.items():
+#         for k2, attr in attrs[k1].items():
+#             elem.set(k2, attr)
+# 
+#     print(tostring(root))
+# 
+# 
+# # <population >
+# # <person id= "1">
+# # <plan selected= "yes " score= " 93.2987721 ">
+# # <act type= " home " link= "1" end_time= " 07:16:23 " />
+# # <leg mode= "car ">
+# # <route type= " links ">1 2 3</ route >
+# # </ leg >
+# # <act type= " work " link= "3" end_time= " 17:38:34 " />
+# # <leg mode= "car ">
+# # <route type= " links ">3 1</ route >
+# # </ leg >
+# # <act type= " home " link= "1" />
+# # </ plan >
+# # </ person >
+# # <person id= "2">
+# # <plan selected= "yes " score= " 144.39002 ">
+# # ...
+# # </ plan >
+# # </ person >
+# # </ population >
+# 
+# # main_nodes = pd.read_csv(r'C:\Users\haris.ballis\OneDrive - Transport Systems Catapult\Personal\PhD\Model_Cyprus\Data\Network\Zones\nodes_in-fully-detailed-area.csv')
+# # mn = main_nodes.NO.tolist()
+# 
+# # idxsl = pd.IndexSlice
+# # int_demand = demand.loc[idxsl[:, :, mn, mn], :]
+# 
+# # In[ ]: 
+#==============================================================================
