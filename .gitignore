@@ -56,3 +56,7 @@ docs/_build/
 
 # PyBuilder
 target/
+
+pop\.xml
+
+\.ipynb_checkpoints/
