@@ -60,3 +60,5 @@ target/
 pop\.xml
 
 \.ipynb_checkpoints/
+
+\.idea/
