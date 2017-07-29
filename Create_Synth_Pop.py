@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
-from xml.etree.ElementTree import ElementTree, Element, SubElement, tostring
+from lxml.etree import ElementTree, Element, SubElement
 import datetime
+from xml.dom import minidom
 from matsim import Agent, Activity, Plan, Stage, Leg, Route
+
 
 def datetime_to_secs(time):
     if type(time) is datetime.time:
@@ -44,7 +46,7 @@ def write_xml_attrs(cls, xml_elem):
 
     
 def build_pop_xml(pop):
-    xml_root = Element('population')
+    xml_root = Element('plans')
     for person in pop:
         xml_agent = SubElement(xml_root, 'person')
         write_xml_attrs(person, xml_agent)
@@ -68,18 +70,18 @@ def build_pop_xml(pop):
     return xml_root
 
 
-def read_centroids(path='../Network/Zones/zones_centroids_EPSG6312.csv'):
+def read_centroids(path):
     df = pd.read_csv(path, index_col=3)
     df = df[['x', 'y']]
     return df
 
 
-def read_demand_mat(path='../Demand/matrices_demand.txt'):
+def read_demand_mat(path):
     df = pd.read_csv(path, delimiter=';', index_col=[0, 1, 2])
     return df
 
 
-def read_info_mat(path='../Demand/matrices_info.txt'):
+def read_info_mat(path):
     df = pd.read_csv(path, delimiter=';', index_col=0)
     return df
 
@@ -151,12 +153,16 @@ def build_pop(trips, zone_coords, dep_times_devs):
 
 
 def main():
-    dem = read_demand_mat()
-    dem_info = read_info_mat()
-    zone_coords = read_centroids()
+    path_demand = '../Demand/matrices_demand.txt'
+    path_info = '../Demand/matrices_info.txt'
+    path_centroids = '../Network/Zones/zones_centroids_EPSG323636.csv'
 
+    dem = read_demand_mat(path_demand)
+    dem_info = read_info_mat(path_info)
+    zone_coords = read_centroids(path_centroids)
+
+    # Clean the demand matrix
     demand = prepare_demand_mat(dem, dem_info)
-
     demand_synthPop = demand.xs(['HBW', 'C'], level=[0, 1], drop_level=False)
 
     # Departure time
@@ -176,14 +182,13 @@ def main():
     # exclude 0 trips
     trips = trips[trips != 0]
     # !!!!!!!!!!!!!!!!
-    trips = trips.head(1)
+    # trips = trips.head(1)
 
     pop = build_pop(trips, zone_coords, dep_times_devs)
 
-    xml = build_pop_xml(pop)
+    fxml = build_pop_xml(pop)
 
-    ElementTree(xml).write('pop.xml')
-
+    ElementTree(fxml).write('pop_EPSG32636.xml', pretty_print=True)
 
 if __name__ == "__main__":
     main()
