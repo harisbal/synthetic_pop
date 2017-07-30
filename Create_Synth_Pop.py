@@ -2,6 +2,7 @@ import sys
 import pandas as pd
 import numpy as np
 from matsim import Agent, Activity, Plan, Stage, TripChain, Leg, Route
+import random
 from lxml.etree import ElementTree, Element, SubElement, tostring
 import datetime
 import inspect
@@ -110,14 +111,14 @@ def prepare_demand_mat(mat_dem, mat_info):
     # Cleaning
     demand.reset_index(inplace=True)
     demand = demand.assign(Purpose=lambda x: x.NAME.str.split('_').str[0])
-    demand = demand.assign(Direction=lambda x: x.NAME.str.split('_').str[1])
+    demand = demand.assign(Source=lambda x: x.NAME.str.split('_').str[1])
     demand.drop('NAME', axis=1, inplace=True)
 
     demand.rename(columns={'FROMNO': 'From_Node', 'TONO': 'To_Node', 'VALUE': 'Trips'}, inplace=True)
-    demand.Purpose.astype('category')
-    demand.Direction.astype('category')
+    demand.Purpose = demand.Purpose = demand.Purpose.astype('category')
+    demand.Source = demand.Source.astype('category')
 
-    demand.set_index(['Purpose', 'Direction', 'From_Node', 'To_Node'], inplace=True)
+    demand.set_index(['Purpose', 'Source', 'From_Node', 'To_Node'], inplace=True)
 
     return demand
 
@@ -147,20 +148,16 @@ def create_activity(acts_time_info, act_type, xy):
     act = Activity(type=act_type, x=x, y=y, end_time=end_time, duration=duration)
     return act
 
-"""
-def create_stage(act_zones, act_types, act_times, zone_coords):
-    orig_zone = act_zones['orig']
-    orig_zone = act_zones['dest']
-
-    orig_type = act_types[]
-    for act_type in activity_types_info:
-        for k, v in act_type.items():
-
-            create_activity(act_type, )
-"""
+def randomise_coords(xy, dist):
+    x, y = xy
+    x = x + random.uniform(-dist, dist)
+    y = y + random.uniform(-dist, dist)
+    xy = x, y
+    return xy
 
 # Not really flexible yet
 def build_pop(demand, zone_coords, acts_time_info):
+    rand_dist = 500  # Create random points around zone coords
     pop = []
     agent_id = 1
     # Keep only the HBW trips (should be HBW_FH actually)
@@ -170,6 +167,7 @@ def build_pop(demand, zone_coords, acts_time_info):
     nhb_trips = demand.xs(['NHB', 'C'], level=[0, 1])
     # TODO We have way too few nhb trips that's why ceiling is applied
     nhb_trips = nhb_trips.apply(np.ceil)
+    nhb_trips = nhb_trips.mul(50)
 
     for trip in trips.iteritems():
         idx = trip[0]
@@ -184,10 +182,15 @@ def build_pop(demand, zone_coords, acts_time_info):
             # First activity home
 
             xy = tuple(zone_coords.loc[d['From_Node']])
+            xy = randomise_coords(xy, rand_dist)
+
             # Set the home coords of the agent
             agent.home_xy = xy
             act_orig = create_activity(acts_time_info, 'home', xy)
+
             xy = tuple(zone_coords.loc[d['To_Node']])
+            xy = randomise_coords(xy, rand_dist)
+
             act_dest = create_activity(acts_time_info, 'work', xy)
             
             # Create the leg
@@ -217,7 +220,11 @@ def build_pop(demand, zone_coords, acts_time_info):
                     # Remove the nhb trip from the nhb matrix
                     nhb_trips.loc[oriz_zone, dest_zone] = nhb_dests.loc[dest_zone] - 1
 
-                    xy = tuple(zone_coords.loc[dest_zone])
+                    x, y = zone_coords.loc[dest_zone]
+                    x = x + random.uniform(-rand_dist, rand_dist)
+                    y = y + random.uniform(-rand_dist, rand_dist)
+                    xy = x, y
+
                     act_dest = create_activity(acts_time_info, 'leisure', xy)
 
                     # Create the leg
@@ -277,14 +284,12 @@ def main():
 
     # exclude 0 trips
     trips = trips[trips != 0]
-    # !!!!!!!!!!!!!!!!
-    # trips = trips.head(100)
 
     pop = build_pop(trips, zone_coords, acts_time_info)
 
     fxml = build_pop_xml(pop)
 
-    with open('pop.xml', 'wb') as f:
+    with open('pop_incrNHB.xml', 'wb') as f:
         s = tostring(fxml, encoding="UTF-8", xml_declaration=True, pretty_print=True,
                      doctype='<!DOCTYPE plans SYSTEM "http://www.matsim.org/files/dtd/plans_v4.dtd" >')
         f.write(s)
