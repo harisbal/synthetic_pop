@@ -1,9 +1,11 @@
+import itertools
+import warnings
+
 """
 File containing the equivalent to MATSim classes
 
 author: Haris Ballis (25/07/2017)
 """
-
 class Leg(object):
     """ Plans class """
 
@@ -35,16 +37,15 @@ class Route(object):
 class Agent(object):
     """ Agent class """
 
-    def __init__(self, **kwargs):
+    def __init__(self,plans=list(), **kwargs):
         prop_defaults = {
-            'id': 'non_defined'
+            'id': None,
+            'home_xy': None
         }
 
         for (prop, default) in prop_defaults.items():
             setattr(self, prop, kwargs.get(prop, default))
 
-        plans = list()
-        plans.append(Plan())
         self.plans = plans
 
 
@@ -57,6 +58,7 @@ class Activity(object):
             'link': None,
             'x': None,
             'y': None,
+            'duration': None,
             'end_time': None
         }
 
@@ -91,11 +93,54 @@ class Stage(object):
             self.chain = chain
 
 
-class Plan(object):
-    trip_chain = list()
-    trip_chain.append(Stage())
+class TripChain(object):
+    """
+    Args:
+        stages (list): List of stage objects
 
-    def __init__(self, trip_chain=trip_chain, **kwargs):
+    Attributes:
+        stages (list): Sequence of stages
+
+    """
+
+    def __init__(self, stages, **kwargs):
+        prop_defaults = {
+            'selected': 'no'
+        }
+
+        for (prop, default) in prop_defaults.items():
+            setattr(self, prop, kwargs.get(prop, default))
+
+        self.stages = stages
+        self.chain = self.chain_from_stages(stages)
+
+    def chain_from_stages(self, stages):
+        chain_tmp = list()
+        for s in stages:
+            for c in s.chain:
+                chain_tmp.append(c)
+        # Check for consecutive duplicates
+        chain = [x[0] for x in itertools.groupby(chain_tmp)]
+        return chain
+
+    def append_stage(self, stage):
+        stages = self.stages
+        # The last activity of the former trip chain and the
+        # first activity of the new stage must be the same
+        act_prev = stages[-1].chain[-1]
+        act_next = stage.chain[0]
+
+        if act_prev == act_next:
+            stages.append(stage)
+            self.chain = self.chain_from_stages(stages)
+        else:
+            warnings.warn('Last activity of previous stage '
+                          'does not match first activity of current')
+
+
+class Plan(object):
+
+    def __init__(self, trip_chain, **kwargs):
         prop_defaults = {
             'selected': 'no'
         }
@@ -105,14 +150,3 @@ class Plan(object):
 
         self.trip_chain = trip_chain
 
-        # def append_stage(self, stage):
-        #     tc = self.trip_chain
-        #     # The last activity of the former trip chain and the
-        #     # first activity of the new stage must be the same
-        #     act_old = tc[-1].chain[-1]
-        #     act_new = stage.chain[0]
-        #
-        #     # To-DO this comparison wont work!
-        #      if act_old == act_new:
-        #         tc = tc.append(stage[1:])
-        #         self.trip_chain = tc

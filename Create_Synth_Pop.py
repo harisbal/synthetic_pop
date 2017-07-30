@@ -1,9 +1,11 @@
+import sys
 import pandas as pd
 import numpy as np
-from lxml.etree import ElementTree, Element, SubElement
+from matsim import Agent, Activity, Plan, Stage, TripChain, Leg, Route
+from lxml.etree import ElementTree, Element, SubElement, tostring
 import datetime
-from xml.dom import minidom
-from matsim import Agent, Activity, Plan, Stage, Leg, Route
+import inspect
+import warnings
 
 
 def datetime_to_secs(time):
@@ -16,11 +18,17 @@ def datetime_to_secs(time):
 
 
 def rand_normal_time(time, dev):
+    # Returns a normally distributed random number and converts it into time
+    # Negative time gets converted to 0
     mean = datetime_to_secs(datetime.datetime.strptime(time, '%H:%M').time())
     std = datetime_to_secs(datetime.datetime.strptime(dev, '%H:%M').time())
     # Draw from a normal distr
     time_secs = np.random.normal(loc=mean, scale=std)
-    rand_time = str(datetime.timedelta(seconds=time_secs)).split('.')[0]
+    if time_secs > 0:
+        rand_time = str(datetime.timedelta(seconds=time_secs)).split('.')[0]
+    else:
+        warnings.warn('Negative time was calculated, returned 0')
+        rand_time = 0
     return rand_time
 
 
@@ -40,7 +48,7 @@ def write_xml_elem(c, d, p):
 
 def write_xml_attrs(cls, xml_elem):
     for attr, v in cls.__dict__.items():
-        if not isinstance(v, list):
+        if isinstance(v, (int, float, str)):
             if v:
                 xml_elem.set(attr, str(v))
 
@@ -53,7 +61,7 @@ def build_pop_xml(pop):
         for plan in person.plans:
             xml_plan = SubElement(xml_agent, 'plan')
             write_xml_attrs(plan, xml_plan)
-            for stage in plan.trip_chain:
+            for stage in plan.trip_chain.stages:
                 # Origin Activity
                 xml_activity = SubElement(xml_plan, 'act')
                 write_xml_attrs(stage.orig_act, xml_activity)
@@ -64,9 +72,11 @@ def build_pop_xml(pop):
                     if route:
                         xml_route = SubElement(xml_leg, 'route')
                         write_xml_attrs(route, xml_route)
-                # Destination activity
-                xml_activity = SubElement(xml_plan, 'act')
-                write_xml_attrs(stage.dest_act, xml_activity)
+            # The destination activity is required to be written in the xml
+            # only for the last stage since the dest_act is the orig_act of the nect stage
+            # Destination activity
+            xml_activity = SubElement(xml_plan, 'act')
+            write_xml_attrs(stage.dest_act, xml_activity)
     return xml_root
 
 
@@ -94,8 +104,8 @@ def prepare_demand_mat(mat_dem, mat_info):
     df = df.set_index(['NAME', 'FROMNO', 'TONO'])
     df.sort_index(inplace=True)
 
-    demand = df.loc[['HBW_C', 'HBW_X', 'HBEDU_C', 'HBEDU_X', 'HBO_C', 'HBO_X', 'HBSH_C', 'HBSH_X', 'NHB_C', 'NHB_X', ],
-             :]
+    demand = df.loc[['HBW_C', 'HBW_X', 'HBEDU_C', 'HBEDU_X', 'HBO_C',
+                     'HBO_X', 'HBSH_C', 'HBSH_X', 'NHB_C', 'NHB_X'], :]
 
     # Cleaning
     demand.reset_index(inplace=True)
@@ -111,10 +121,56 @@ def prepare_demand_mat(mat_dem, mat_info):
 
     return demand
 
+
+def create_activity(acts_time_info, act_type, xy):
+    keys = list(acts_time_info[act_type].keys())
+    k_time = keys[0]  # k_time is depTime or duration
+    k_dev = keys[1]  # k_dev is st.dev of depTime or duration
+
+    time = acts_time_info[act_type][k_time]
+    dev = acts_time_info[act_type][k_dev]
+
+    end_time = None
+    duration = None
+
+    rand_time = rand_normal_time(time, dev)
+
+    if k_time == 'depTime':
+        end_time = rand_time
+    else:
+        # Duration is defined
+        duration = rand_time
+        
+    x, y = xy
+
+    # TODO must generate random points in the zone
+    act = Activity(type=act_type, x=x, y=y, end_time=end_time, duration=duration)
+    return act
+
+"""
+def create_stage(act_zones, act_types, act_times, zone_coords):
+    orig_zone = act_zones['orig']
+    orig_zone = act_zones['dest']
+
+    orig_type = act_types[]
+    for act_type in activity_types_info:
+        for k, v in act_type.items():
+
+            create_activity(act_type, )
+"""
+
 # Not really flexible yet
-def build_pop(trips, zone_coords, dep_times_devs):
+def build_pop(demand, zone_coords, acts_time_info):
     pop = []
     agent_id = 1
+    # Keep only the HBW trips (should be HBW_FH actually)
+    trips = demand.xs(['HBW', 'C'], level=[0,1], drop_level=False)
+
+    # Destinations of NHB trips
+    nhb_trips = demand.xs(['NHB', 'C'], level=[0, 1])
+    # TODO We have way too few nhb trips that's why ceiling is applied
+    nhb_trips = nhb_trips.apply(np.ceil)
+
     for trip in trips.iteritems():
         idx = trip[0]
         val = trip[1]
@@ -123,26 +179,66 @@ def build_pop(trips, zone_coords, dep_times_devs):
         for t in range(0, int(val)):
             # Create the agent
             agent = Agent(id=agent_id)
-
             # Create the activities
-            # Get Node's coords
-            depTime_home, depTime_home_dev = dep_times_devs[0]
-            x, y = zone_coords.loc[d['From_Node']]
-            end_time = rand_normal_time(depTime_home, depTime_home_dev)
-            # TODO must generate random points in the zone
-            act_orig = Activity(type='home', x=x, y=y, end_time=end_time)
+            # Stage 1: Home to Work
+            # First activity home
 
-            depTime_work, depTime_work_dev = dep_times_devs[1]
-            x, y = zone_coords.loc[d['To_Node']]
-            end_time = rand_normal_time(depTime_work, depTime_work_dev)
-            act_dest = Activity(type='work', x=x, y=y, end_time=end_time)
+            xy = tuple(zone_coords.loc[d['From_Node']])
+            # Set the home coords of the agent
+            agent.home_xy = xy
+            act_orig = create_activity(acts_time_info, 'home', xy)
+            xy = tuple(zone_coords.loc[d['To_Node']])
+            act_dest = create_activity(acts_time_info, 'work', xy)
+            
+            # Create the leg
+            leg = Leg(mode='car')
+            # Stage is a trip between 2 activities
+            stage = Stage(activities=[act_orig, act_dest], legs=[leg])
+
+            # Create the first trip chain
+            stages = list()
+            stages.append(stage)
+            trip_chain = TripChain(stages)
+
+            # First naive implementation of a trip chain
+            # Stage 2: Work to Leissure
+            # The NHB trips originating from the work location of the previous stage
+            # will be chained to the HBW trips of the previous stage
+            oriz_zone = d['From_Node']
+            nhb_dests = nhb_trips.xs(oriz_zone, level=0)
+            if not nhb_dests.empty:
+                if nhb_dests.sum() >= 1:
+                    # The previous stage's dest must be the next's origin
+                    act_orig = act_dest
+
+                    # Pick a random destination weighted by the number of trips
+                    sample = nhb_dests.sample(1, weights=nhb_dests)
+                    dest_zone = sample.index[0]
+                    # Remove the nhb trip from the nhb matrix
+                    nhb_trips.loc[oriz_zone, dest_zone] = nhb_dests.loc[dest_zone] - 1
+
+                    xy = tuple(zone_coords.loc[dest_zone])
+                    act_dest = create_activity(acts_time_info, 'leisure', xy)
+
+                    # Create the leg
+                    leg = Leg(mode='car')
+                    # Stage is a trip between 2 activities
+                    stage = Stage(activities=[act_orig, act_dest], legs=[leg])
+
+                    trip_chain.append_stage(stage)
+
+            # all agents return home, we add this manually
+            act_orig = act_dest
+            x, y = agent.home_xy
+            act_dest = Activity(type='home', x=x, y=y, end_time=None, duration=None)
 
             # Create the leg
             leg = Leg(mode='car')
             # Stage is a trip between 2 activities
             stage = Stage(activities=[act_orig, act_dest], legs=[leg])
+            trip_chain.append_stage(stage)
+
             # Create the plans
-            trip_chain = [stage]
             plan = Plan(selected='yes', trip_chain=trip_chain)
             agent.plans = [plan]
 
@@ -155,7 +251,7 @@ def build_pop(trips, zone_coords, dep_times_devs):
 def main():
     path_demand = '../Demand/matrices_demand.txt'
     path_info = '../Demand/matrices_info.txt'
-    path_centroids = '../Network/Zones/zones_centroids_EPSG323636.csv'
+    path_centroids = '../Network/Zones/zones_centroids_EPSG32636.csv'
 
     dem = read_demand_mat(path_demand)
     dem_info = read_info_mat(path_info)
@@ -163,18 +259,18 @@ def main():
 
     # Clean the demand matrix
     demand = prepare_demand_mat(dem, dem_info)
-    demand_synthPop = demand.xs(['HBW', 'C'], level=[0, 1], drop_level=False)
+    # demand_synthPop = demand.xs(['HBW', 'C'], level=[0, 1], drop_level=False)
+    idx = pd.IndexSlice
+    demand_synthPop = demand.loc[idx[['HBW', 'NHB'], 'C'], :]
 
-    # Departure time
-    depTime_home = '08:00'  # 8 hours
-    depTime_home_dev = '00:30'  # deviation
-
-    depTime_work = '17:00'  # 8 hours
-    depTime_work_dev = '00:30'  # deviation
-
-    dep_times_devs = [(depTime_home, depTime_home_dev),
-                      (depTime_work, depTime_work_dev)]
-
+    # Dictionary with departure times and standard devs
+    acts_time_info = {'home': {'depTime': '08:00',
+                                     'dev': '00:30'},
+                           'work':  {'depTime': '17:00',
+                                     'dev': '00:30'},
+                       'leisure':   {'depTime': '19:00',
+                                     'dev': '01:00'}
+                      }
     # Create integer trips
     # TODO improve method
     trips = demand_synthPop.Trips.round()
@@ -182,13 +278,16 @@ def main():
     # exclude 0 trips
     trips = trips[trips != 0]
     # !!!!!!!!!!!!!!!!
-    # trips = trips.head(1)
+    # trips = trips.head(100)
 
-    pop = build_pop(trips, zone_coords, dep_times_devs)
+    pop = build_pop(trips, zone_coords, acts_time_info)
 
     fxml = build_pop_xml(pop)
 
-    ElementTree(fxml).write('pop_EPSG32636.xml', pretty_print=True)
+    with open('pop.xml', 'wb') as f:
+        s = tostring(fxml, encoding="UTF-8", xml_declaration=True, pretty_print=True,
+                     doctype='<!DOCTYPE plans SYSTEM "http://www.matsim.org/files/dtd/plans_v4.dtd" >')
+        f.write(s)
 
 if __name__ == "__main__":
     main()
